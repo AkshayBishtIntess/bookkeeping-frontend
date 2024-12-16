@@ -37,7 +37,7 @@ const ClientStatements = () => {
   const navigate = useNavigate();
 
   const handleNavigate = (record) => {
-    navigate("/statement-history", { state: { clientData: record } });
+    navigate(`/statement-history/${record.accountId}`);
   };
 
   const columns = [
@@ -114,7 +114,7 @@ const ClientStatements = () => {
     setClients(client);
   }, []);
 
-  console.log(clientData);
+  // console.log(clientData);
 
   // const [data, setData] = useState(dummyData);
   const [loading, setLoading] = useState(false);

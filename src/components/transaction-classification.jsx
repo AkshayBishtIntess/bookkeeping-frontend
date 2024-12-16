@@ -9,35 +9,40 @@ import {
   Col,
   Card,
   Input,
-  Tooltip,
   Typography,
   Select,
   Form,
+  Tooltip,
+  Spin,
 } from "antd";
 import {
   DeleteOutlined,
-  EyeOutlined,
-  CloseCircleFilled,
   EditOutlined,
   CheckOutlined,
   CloseOutlined,
   PlusOutlined,
-  RightOutlined,
+  CloseCircleFilled,
 } from "@ant-design/icons";
 import { CopyIcon } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import moment from "moment";
-import useClientStore from "../store/useClientStore";
 import axios from "axios";
 
 const { Title } = Typography;
 const { confirm } = Modal;
 
 const TransactionClassification = () => {
-  const [statementData, setStatementData] = useState(null);
+  const { accountId } = useParams();
+  const navigate = useNavigate();
   const [form] = Form.useForm();
+
+  // State management
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [editingRow, setEditingRow] = useState(null);
   const [isNewRow, setIsNewRow] = useState(false);
+  const [error, setError] = useState(null);
+
   const [editedData, setEditedData] = useState({
     transactions: [],
     accountInfo: {
@@ -54,14 +59,36 @@ const TransactionClassification = () => {
       },
     },
   });
-  const [editingRow, setEditingRow] = useState(null);
-  const [formFields, setFormFields] = useState({
-    bankName: "",
-    beginningBalance: 0,
-    accountNumber: "",
-    endingBalance: 0,
+
+  const [recentStatement, setRecentStatement] = useState({
+    success: false,
+    message: "",
+    statistics: {
+      classified: 0,
+      total: 0
+    },
+    accountInfo: {
+      id: "",
+      bankName: "",
+      accountHolder: "",
+      accountNumber: "",
+      statementFromDate: "",
+      statementToDate: "",
+      beginningBalance: 0,
+      endingBalance: 0,
+      clientId: "",
+      pdfUrl: "",
+      pdfFileName: "",
+      pdfUploadDate: "",
+      pdfFileSize: "",
+      monthReference: "",
+      status: "",
+      createdAt: "",
+      updatedAt: ""
+    },
+    transactions: []
   });
-  const [loading, setLoading] = useState(false);
+
   const [tableParams, setTableParams] = useState({
     pagination: {
       current: 1,
@@ -72,39 +99,71 @@ const TransactionClassification = () => {
     },
   });
 
-  const { recentStatement } = useClientStore();
-
+  // Initial data fetch
   useEffect(() => {
-    if (recentStatement) {
-      setStatementData(recentStatement);
-
-      // Update the transactions for the table
-      setEditedData({
-        ...editedData,
-        transactions: recentStatement.transactions || [],
-        accountInfo: recentStatement.accountInfo,
-      });
-
-      // Update the form fields
-      setFormFields({
-        bankName: recentStatement.accountInfo?.bankName || "",
-        beginningBalance: recentStatement.accountInfo?.balances?.beginning || 0,
-        accountNumber: recentStatement.accountInfo?.accountNumber || "",
-        endingBalance: recentStatement.accountInfo?.balances?.ending || 0,
-      });
-
-      // Update table pagination
-      setTableParams((prev) => ({
-        ...prev,
-        pagination: {
-          ...prev.pagination,
-          total: recentStatement.transactions?.length || 0,
-        },
-      }));
+    if (accountId) {
+      fetchClassificationData();
+    } else {
+      setError("No account ID provided");
+      setLoading(false);
     }
-  }, [recentStatement]);
+  }, [accountId]);
 
-  // Handle table change including pagination and sorting
+  // Fetch classification data
+  const fetchClassificationData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_BASE_URL}/classify-transactions/${accountId}`
+      );
+      
+      if (response.data) {
+        setRecentStatement(response.data);
+        setEditedData({
+          transactions: response.data.transactions || [],
+          accountInfo: {
+            bankName: response.data.accountInfo.bankName,
+            accountNumber: response.data.accountInfo.accountNumber,
+            accountHolder: response.data.accountInfo.accountHolder,
+            balances: {
+              beginning: response.data.accountInfo.beginningBalance,
+              ending: response.data.accountInfo.endingBalance,
+            },
+            statementPeriod: {
+              from: response.data.accountInfo.statementFromDate,
+              to: response.data.accountInfo.statementToDate,
+            },
+          },
+        });
+        setTableParams(prev => ({
+          ...prev,
+          pagination: {
+            ...prev.pagination,
+            total: response.data.transactions?.length || 0,
+          },
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch classification data:", error);
+      setError("Failed to load classification data");
+      message.error("Failed to load classification data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Table pagination update
+  useEffect(() => {
+    setTableParams(prev => ({
+      ...prev,
+      pagination: {
+        ...prev.pagination,
+        total: editedData.transactions.length
+      }
+    }));
+  }, [editedData.transactions]);
+
   const handleTableChange = (pagination, filters, sorter) => {
     setTableParams({
       pagination,
@@ -114,30 +173,18 @@ const TransactionClassification = () => {
   };
 
   const handleFieldEdit = (field, value) => {
-    setFormFields((prev) => ({
+    setRecentStatement(prev => ({
       ...prev,
-      [field]: value,
-    }));
-
-    // Update editedData simultaneously
-    setEditedData((prev) => {
-      const newData = { ...prev };
-      switch (field) {
-        case "bankName":
-          newData.accountInfo.bankName = value;
-          break;
-        case "accountNumber":
-          newData.accountInfo.accountNumber = value;
-          break;
-        case "beginningBalance":
-          newData.accountInfo.balances.beginning = value;
-          break;
-        case "endingBalance":
-          newData.accountInfo.balances.ending = value;
-          break;
+      accountInfo: {
+        ...prev.accountInfo,
+        [field]: value
       }
-      return newData;
-    });
+    }));
+  };
+
+  const startEditing = (id) => {
+    setEditingRow(id);
+    setIsNewRow(false);
   };
 
   const handleTableEdit = (id, field, value) => {
@@ -150,15 +197,25 @@ const TransactionClassification = () => {
   const updateBankDetails = async () => {
     try {
       await axios.put(
-        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${
-          recentStatement.accountId
-        }`,
+        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${accountId}`,
         editedData
       );
-      message.success("Changes saved successfully");
-      // getStatementByAccountID();
+      message.success("Transaction updated!");
+      // await fetchClassificationData();
     } catch (error) {
       message.error(`Error while saving the data: ${error}`);
+    }
+  };
+
+  const handleSaveFields = async () => {
+    try {
+      setLoading(true);
+      await updateBankDetails();
+      setIsEditing(false);
+    } catch (error) {
+      message.error("Failed to update account information");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -166,30 +223,24 @@ const TransactionClassification = () => {
     setEditingRow(null);
     setIsNewRow(false);
     try {
-      if (editedData.transactions.find((tx) => tx.id === id)) {
-        await updateBankDetails();
-      } else {
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${
-            recentStatement.accountId
-          }`,
-          editedData
-        );
-        message.success("New transaction added successfully");
-      }
+      // Find the transaction in editedData
+      const transaction = editedData.transactions.find(tx => tx.id === id);
+      
+      // Send the entire editedData state
+      await axios.put(
+        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${accountId}`,
+        editedData
+      );
+      
+      message.success(isNewRow ? "New transaction added successfully" : "Transaction updated successfully");
+      // await fetchClassificationData(); // Refresh the data
     } catch (error) {
       message.error("Failed to save transaction");
+      console.error(error);
     }
   };
-
-  const startEditing = (id) => {
-    setEditingRow(id);
-    setIsNewRow(false); // Make sure to set this to false when editing existing row
-  };
-
   const handleCancelRow = () => {
     if (isNewRow) {
-      // Only remove the row if it's a newly added row
       setEditedData((prevData) => ({
         ...prevData,
         transactions: prevData.transactions.filter(
@@ -201,79 +252,31 @@ const TransactionClassification = () => {
     setIsNewRow(false);
   };
 
-  // Add handler for canceling form edit
   const handleCancelFields = () => {
     setIsEditing(false);
-    // Reset form fields to original state
-    if (statementData) {
-      setFormFields({
-        bankName: statementData.accountInfo.bankName,
-        beginningBalance: statementData.accountInfo.balances.beginning,
-        accountNumber: statementData.accountInfo.accountNumber,
-        endingBalance: statementData.accountInfo.balances.ending,
-      });
-    }
-  };
-
-  const handleSaveFields = () => {
-    setIsEditing(false);
-    updateBankDetails();
-  };
-
-  const showDeleteConfirm = (id) => {
-    confirm({
-      title: "Delete transaction",
-      icon: <CloseCircleFilled style={{ color: "red" }} />,
-      content:
-        "Are you sure you want to delete this transaction? This action cannot be undone.",
-      okText: "Yes",
-      okType: "danger",
-      cancelText: "No",
-      onOk() {
-        setEditedData((prevData) => ({
-          ...prevData,
-          transactions: prevData.transactions.filter((tx) => tx.id !== id),
-        }));
-        deleteTransaction(id);
-      },
-    });
-  };
-
-  const deleteTransaction = async (id) => {
-    try {
-      const response = await axios.delete(
-        `${import.meta.env.VITE_API_BASE_URL}/delete/${id}`
-      );
-      message.success(response.data.message);
-      // getStatementByAccountID();
-    } catch (error) {
-      console.log(error);
-      message.error("Failed to delete transaction");
-    }
-  };
-
-  const handleMonth = (value) => {
-    console.log(value);
+    // fetchClassificationData();
   };
 
   const handleAddRow = () => {
+    const maxId = Math.max(...editedData.transactions.map(tx => tx.id));
+
     const newTransaction = {
-      id: Date.now(),
-      date: moment().format("MM/DD/YYYY"),
+      // id: maxId + 1,
+      date: moment().format("YYYY-MM-DD"),
       description: "",
       amount: 0,
       type: "credit",
+      split: null
     };
 
     setEditedData((prevData) => ({
       ...prevData,
-      transactions: [...prevData.transactions, newTransaction], // Add to end of array
+      transactions: [...prevData.transactions, newTransaction],
     }));
 
     setEditingRow(newTransaction.id);
     setIsNewRow(true);
 
-    // Update pagination to show the last page where the new row is added
     const lastPage = Math.ceil(
       (editedData.transactions.length + 1) / tableParams.pagination.pageSize
     );
@@ -287,14 +290,48 @@ const TransactionClassification = () => {
     }));
   };
 
+  const handleDeleteTransaction = async (id) => {
+    try {
+      setLoading(true);
+      await axios.delete(`${import.meta.env.VITE_API_BASE_URL}/transactions/${id}`);
+      
+      setEditedData(prev => ({
+        ...prev,
+        transactions: prev.transactions.filter(tx => tx.id !== id)
+      }));
+      
+      message.success("Transaction deleted successfully");
+    } catch (error) {
+      message.error("Failed to delete transaction");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showDeleteConfirm = (id) => {
+    confirm({
+      title: "Delete transaction",
+      icon: <CloseCircleFilled style={{ color: "red" }} />,
+      content: "Are you sure you want to delete this transaction? This action cannot be undone.",
+      okText: "Yes",
+      okType: "danger",
+      cancelText: "No",
+      onOk() {
+        handleDeleteTransaction(id);
+      },
+    });
+  };
+
+  const handleMonth = (value) => {
+    handleFieldEdit("monthReference", value);
+  };
+
   const columns = [
     {
       title: "SNo.",
       key: "index",
       render: (text, record, index) =>
-        tableParams.pagination.pageSize * (tableParams.pagination.current - 1) +
-        index +
-        1,
+        tableParams.pagination.pageSize * (tableParams.pagination.current - 1) + index + 1,
     },
     {
       title: "Date",
@@ -303,24 +340,21 @@ const TransactionClassification = () => {
       render: (date, record) =>
         editingRow === record.id ? (
           <Input
-            defaultValue={moment(date).format("MM/DD/YYYY")}
+            defaultValue={moment(date).format("YYYY-MM-DD")}
             onChange={(e) => handleTableEdit(record.id, "date", e.target.value)}
           />
         ) : (
-          moment(date).format("MM/DD/YYYY")
+          moment(date).format("YYYY-MM-DD")
         ),
     },
     {
       title: "Description",
       dataIndex: "description",
-      sorter: (a, b) => a.description.length - b.description.length,
       render: (text, record) =>
         editingRow === record.id ? (
           <Input
             defaultValue={text}
-            onChange={(e) =>
-              handleTableEdit(record.id, "description", e.target.value)
-            }
+            onChange={(e) => handleTableEdit(record.id, "description", e.target.value)}
           />
         ) : (
           text
@@ -333,34 +367,35 @@ const TransactionClassification = () => {
         editingRow === record.id ? (
           <Input
             defaultValue={amount}
-            onChange={(e) =>
-              handleTableEdit(record.id, "amount", Number(e.target.value))
-            }
+            type="number"
+            onChange={(e) => handleTableEdit(record.id, "amount", Number(e.target.value))}
           />
         ) : (
           amount
         ),
-      sorter: (a, b) => !editingRow && a.amount - b.amount,
     },
     {
       title: "Type",
       dataIndex: "type",
-      render: (type) => (
-        // <span style={{ color: type === "credit" ? "green" : "red" }}>
-        //   {type.charAt(0).toUpperCase() + type.slice(1)}
-        // </span>
-        <>{type.charAt(0).toUpperCase() + type.slice(1)}</>
-      ),
+      render: (type, record) =>
+        editingRow === record.id ? (
+          <Select
+            defaultValue={type}
+            style={{ width: '100%' }}
+            onChange={(value) => handleTableEdit(record.id, "type", value)}
+            options={[
+              { value: "credit", label: "Credit" },
+              { value: "debit", label: "Debit" },
+            ]}
+          />
+        ) : (
+          type.charAt(0).toUpperCase() + type.slice(1)
+        ),
     },
     {
-      title: "Accounting",
-      dataIndex: "details",
-      render: (details) => (
-        // <span style={{ color: type === "credit" ? "green" : "red" }}>
-        //   {type.charAt(0).toUpperCase() + type.slice(1)}
-        // </span>
-        <>{details?.classification? details?.classification : "Unclassified"}</>
-      ),
+      title: "Split",
+      dataIndex: "split",
+      render: (split) => split || "Unclassified"
     },
     {
       title: "Action",
@@ -407,182 +442,169 @@ const TransactionClassification = () => {
     },
   ];
 
+  if (error) {
+    return (
+      <Card bordered={false}>
+        <div style={{ textAlign: 'center', color: 'red', padding: '20px' }}>
+          {error}
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card bordered={false}>
-      <Row style={{ alignItems: "center" }} gutter={24}>
-        <Col span={18}>
-          <Title level={5}>Client Name</Title>
-          <Input
-            placeholder="Client Name"
-            value={statementData?.accountInfo?.accountHolder}
-            disabled
-            style={{ marginTop: 2 }}
-            suffix={
-              <Tooltip title="Click to copy">
-                <CopyIcon style={{ color: "rgba(0,0,0,.45)" }} />
-              </Tooltip>
-            }
-            size="large"
-          />
-        </Col>
-        <Col span={6}>
-          <Title level={5}>Month Reference</Title>
-          <Select
-            placeholder="Select"
-            size="large"
-            style={{ width: "100%" }}
-            onChange={handleMonth}
-            value={
-              statementData
-                ? moment(statementData?.accountInfo?.statementPeriod.from).format(
-                    "MMM"
-                  )
-                : undefined
-            }
-            options={[
-              { value: "Jan", label: "January" },
-              { value: "Feb", label: "February" },
-              { value: "Mar", label: "March" },
-              { value: "Apr", label: "April" },
-              { value: "May", label: "May" },
-              { value: "Jun", label: "June" },
-              { value: "Jul", label: "July" },
-              { value: "Aug", label: "August" },
-              { value: "Sep", label: "September" },
-              { value: "Oct", label: "October" },
-              { value: "Nov", label: "November" },
-              { value: "Dec", label: "December" },
-            ]}
-          />
-        </Col>
-      </Row>
-
-      <Row gutter={[24, 24]} style={{ marginTop: 28 }}>
-        <Col span={8}>
-          <Form layout="horizontal" name="test" form={form}>
-            <Form.Item label="Bank Name">
+      {loading && !editingRow && !isEditing ? (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin size="large" />
+        </div>
+      ) : (
+        <>
+          <Row style={{ alignItems: "center" }} gutter={24}>
+            <Col span={18}>
+              <Title level={5}>Client Name</Title>
               <Input
-                placeholder="Bank Name"
-                variant={isEditing ? "outlined" : "borderless"}
-                value={formFields.bankName}
-                readOnly={!isEditing}
-                onChange={(e) => handleFieldEdit("bankName", e.target.value)}
-              />
-            </Form.Item>
-            <Form.Item label="Beginning Balance">
-              <Input
-                placeholder="Beginning Balance"
-                variant={isEditing ? "outlined" : "borderless"}
-                value={formFields.beginningBalance}
-                readOnly={!isEditing}
-                onChange={(e) =>
-                  handleFieldEdit("beginningBalance", Number(e.target.value))
+                placeholder="Client Name"
+                value={recentStatement?.accountInfo?.accountHolder ?? ""}
+                disabled
+                style={{ marginTop: 2 }}
+                suffix={
+                  <Tooltip title="Click to copy">
+                    <CopyIcon style={{ color: "rgba(0,0,0,.45)" }} />
+                  </Tooltip>
                 }
+                size="large"
               />
-            </Form.Item>
-          </Form>
-        </Col>
-        <Col span={8}>
-          <Form layout="horizontal" name="test" form={form}>
-            <Form.Item label="Account Number">
-              <Input
-                placeholder="Account Number"
-                variant={isEditing ? "outlined" : "borderless"}
-                value={formFields.accountNumber}
-                readOnly={!isEditing}
-                onChange={(e) =>
-                  handleFieldEdit("accountNumber", e.target.value)
-                }
+            </Col>
+            <Col span={6}>
+              <Title level={5}>Month Reference</Title>
+              <Select
+                placeholder="Select"
+                size="large"
+                style={{ width: "100%" }}
+                value={recentStatement?.accountInfo?.monthReference ?? ""}
+                onChange={handleMonth}
+                options={[
+                  { value: "2024-01", label: "January 2024" },
+                  { value: "2024-02", label: "February 2024" },
+                  { value: "2024-03", label: "March 2024" },
+                  { value: "2024-04", label: "April 2024" },
+                  { value: "2024-05", label: "May 2024" },
+                  { value: "2024-06", label: "June 2024" },
+                  { value: "2024-07", label: "July 2024" },
+                  { value: "2024-08", label: "August 2024" },
+                  { value: "2024-09", label: "September 2024" },
+                  { value: "2024-10", label: "October 2024" },
+                  { value: "2024-11", label: "November 2024" },
+                  { value: "2024-12", label: "December 2024" },
+                ]}
               />
-            </Form.Item>
-            <div style={{ display: "flex" }}>
-              <Form.Item label="Ending Balance">
-                <Input
-                  placeholder="Ending Balance"
-                  variant={isEditing ? "outlined" : "borderless"}
-                  value={formFields.endingBalance}
-                  readOnly={!isEditing}
-                  onChange={(e) =>
-                    handleFieldEdit("endingBalance", Number(e.target.value))
-                  }
-                />
-              </Form.Item>
-            </div>
-          </Form>
-        </Col>
-        <Col span={8} style={{ textAlign: "center" }}>
-          <Space size="middle">
-            {isEditing ? (
-              <>
-                <Button
-                  type="primary"
-                  className="saveBtn"
-                  shape="circle"
-                  icon={<CheckOutlined />}
-                  onClick={handleSaveFields}
-                />
-                <Button
-                  type="primary"
-                  danger
-                  shape="circle"
-                  icon={<CloseOutlined />}
-                  onClick={handleCancelFields}
-                />
-              </>
-            ) : (
-              <>
-                <Button
-                  type="primary"
-                  className="actionBtnColors"
-                  shape="circle"
-                  icon={<EditOutlined />}
-                  onClick={() => setIsEditing(true)}
-                />
-                {/* <Button
-                  type="primary"
-                  className="actionBtnColors"
-                  shape="circle"
-                  icon={<EyeOutlined />}
-                />
-                <Button
-                  type="primary"
-                  shape="circle"
-                  icon={<DeleteOutlined />}
-                  danger
-                  onClick={() => showDeleteConfirm(statementData?.accountId)}
-                /> */}
-                <Button
-                  type="primary"
-                  shape="circle"
-                  className="actionBtnColors"
-                  icon={<PlusOutlined />}
-                  onClick={() => handleAddRow()}
-                />
-              </>
-            )}
-          </Space>
-        </Col>
-      </Row>
+            </Col>
+          </Row>
 
-      <Table
-        columns={columns}
-        rowKey={(record) => record.id}
-        dataSource={editedData.transactions}
-        pagination={tableParams.pagination}
-        loading={loading}
-        onChange={handleTableChange}
-        scroll={{ x: 800 }}
-      />
-      {/* <Button
-        type="text"
-        iconPosition={"end"}
-        icon={<RightOutlined />}
-        className="classifyBtn"
-        size="large"
-      >
-        Classify
-      </Button> */}
+          <Row gutter={[24, 24]} style={{ marginTop: 28 }}>
+            <Col span={8}>
+              <Form layout="horizontal" form={form}>
+                <Form.Item label="Bank Name">
+                  <Input
+                    placeholder="Bank Name"
+                    variant={isEditing ? "outlined" : "borderless"}
+                    value={recentStatement?.accountInfo?.bankName ?? ""}
+                    readOnly={!isEditing}
+                    onChange={(e) => handleFieldEdit("bankName", e.target.value)}
+                  />
+                </Form.Item>
+                <Form.Item label="Beginning Balance">
+                  <Input
+                    placeholder="Beginning Balance"
+                    type="number"
+                    variant={isEditing ? "outlined" : "borderless"}
+                    value={recentStatement?.accountInfo?.beginningBalance ?? ""}
+                    readOnly={!isEditing}
+                    onChange={(e) => handleFieldEdit("beginningBalance", Number(e.target.value))}
+                  />
+                </Form.Item>
+              </Form>
+            </Col>
+            <Col span={8}>
+              <Form layout="horizontal" form={form}>
+                <Form.Item label="Account Number">
+                  <Input
+                    placeholder="Account Number"
+                    variant={isEditing ? "outlined" : "borderless"}
+                    value={recentStatement?.accountInfo?.accountNumber ?? ""}
+                    readOnly={!isEditing}
+                    onChange={(e) => handleFieldEdit("accountNumber", e.target.value)}
+                  />
+                </Form.Item>
+                <Form.Item label="Ending Balance">
+                  <Input
+                    placeholder="Ending Balance"
+                    variant={isEditing ? "outlined" : "borderless"}
+                    type="number"
+                    value={recentStatement?.accountInfo?.endingBalance ?? ""}
+                    readOnly={!isEditing}
+                    onChange={(e) => handleFieldEdit("endingBalance", Number(e.target.value))}
+                  />
+                </Form.Item>
+              </Form>
+            </Col>
+            <Col span={8} style={{ textAlign: "center" }}>
+              <Space size="middle">
+                {isEditing ? (
+                  <>
+                    <Button
+                      type="primary"
+                      className="saveBtn"
+                      shape="circle"
+                      icon={<CheckOutlined />}
+                      onClick={handleSaveFields}
+                    />
+                    <Button
+                      type="primary"
+                      danger
+                      shape="circle"
+                      icon={<CloseOutlined />}
+                      onClick={handleCancelFields}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="primary"
+                      className="actionBtnColors"
+                      shape="circle"
+                      icon={<EditOutlined />}
+                      onClick={() => setIsEditing(true)}
+                    />
+                    <Button
+                      type="primary"
+                      shape="circle"
+                      className="actionBtnColors"
+                      icon={<PlusOutlined />}
+                      onClick={handleAddRow}
+                    />
+                  </>
+                )}
+              </Space>
+            </Col>
+          </Row>
+
+          <div style={{ marginTop: 24 }}>   
+            <Table
+              columns={columns}
+              rowKey={(record) => record.id}
+              dataSource={editedData.transactions}
+              pagination={tableParams.pagination}
+              loading={loading}
+              onChange={handleTableChange}
+              scroll={{ x: 800 }}
+            />
+          </div>
+        </>
+      )}
     </Card>
   );
 };
+
 export default TransactionClassification;

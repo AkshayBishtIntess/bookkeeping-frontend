@@ -39,7 +39,8 @@ const App = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { clients } = useClientStore();
+  const { clients ,  searchValue,
+    setSearchValue } = useClientStore();
 
   const handleSearch = (value) => {
     setOptions(() => {
@@ -60,6 +61,7 @@ const App = () => {
   const handleSelect = (value) => {
     const client = clients.find((client) => client.clientName === value);
     store.setSearchedClient(client);
+    store.setSearchValue(client.clientName);
   };
 
   // Custom menu item renderer with count badge
@@ -109,9 +111,9 @@ const App = () => {
           label: <MenuItemLabel label="Upload Statement" count={22} />,
         },
         {
-          key: "/import-conciliation",
+          key: "/conciliation",
           icon: <ImportOutlined className="iconColors" />,
-          label: <MenuItemLabel label="Import Conciliation" count={8} />,
+          label: <MenuItemLabel label="Conciliation" count={8} />,
         },
         {
           key: "/import-history",
@@ -122,23 +124,23 @@ const App = () => {
        
       ],
     },
-    {
-      key: "g2",
-      label: "MAIN",
-      type: "group",
-      children: [
-        // {
-        //   key: "/statements",
-        //   icon: <FileTextFilled className="iconColors" />,
-        //   label: <MenuItemLabel label="Upload Statement" count={22} />,
-        // },
-        {
-          key: "/transaction-classification",
-          icon: <HistoryOutlined className="iconColors" />,
-          label:<MenuItemLabel label="Transaction Classification" />,
-        },
-      ],
-    },
+    // {
+    //   key: "g2",
+    //   label: "MAIN",
+    //   type: "group",
+    //   children: [
+    //     // {
+    //     //   key: "/statements",
+    //     //   icon: <FileTextFilled className="iconColors" />,
+    //     //   label: <MenuItemLabel label="Upload Statement" count={22} />,
+    //     // },
+    //     {
+    //       key: "/transaction-classification",
+    //       icon: <HistoryOutlined className="iconColors" />,
+    //       label:<MenuItemLabel label="Transaction Classification" />,
+    //     },
+    //   ],
+    // },
   ];
 
   return (
@@ -180,10 +182,14 @@ const App = () => {
               borderRadius: "15px",
               border: "1px solid #ddd",
             }}
-            onSearch={handleSearch}
+            onSearch={(value) => {
+              setSearchValue(value);
+              handleSearch(value);
+            }}
             onSelect={handleSelect}
             placeholder="Try searching <<New Tasks>>"
             options={options}
+            value={searchValue}
             variant="borderless"
             allowClear
           />
@@ -198,7 +204,7 @@ const App = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
             <Route
-              path="/import-conciliation"
+              path="/conciliation"
               element={<ImportConciliation />}
             />
             <Route path="/import-history" element={<ImportHistory />} />
@@ -208,9 +214,9 @@ const App = () => {
               element={<ClientUploadHistory />}
             />
             <Route path="/statements" element={<Statements />} />
-            <Route path="/statement-history" element={<StatementHistory />} />
+            <Route path="/statement-history/:accountId" element={<StatementHistory />} />
             <Route path="/client-statements" element={<ClientStatements />} />
-            <Route path="/transaction-classification" element={<TransactionClassification />} />
+            <Route path="/transaction-classification/:accountId" element={<TransactionClassification />} />
             <Route path="*" element={<div>Page Not Found</div>} />
           </Routes>
         </Content>

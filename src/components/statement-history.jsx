@@ -23,25 +23,27 @@ import {
   CloseOutlined,
   PlusOutlined,
   RightOutlined,
+  LoadingOutlined,
 } from "@ant-design/icons";
 import { CopyIcon } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import moment from "moment";
 import useClientStore from "../store/useClientStore";
 import axios from "axios";
+import toast from "react-hot-toast";
 
 const { Title } = Typography;
 const { confirm } = Modal;
 
 const StatementHistory = () => {
-  const location = useLocation();
-  const clientData = location.state?.clientData;
+  const { accountId } = useParams();
   const navigate = useNavigate();
 
   const [statementData, setStatementData] = useState(null);
   const [form] = Form.useForm();
   const [isEditing, setIsEditing] = useState(false);
   const [isNewRow, setIsNewRow] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
   const [editedData, setEditedData] = useState({
     transactions: [],
     accountInfo: {
@@ -82,9 +84,7 @@ const StatementHistory = () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${
-          clientData.accountId
-        }`
+        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${accountId}`
       );
       const data = response.data.data;
       setStatementData(data);
@@ -125,28 +125,46 @@ const StatementHistory = () => {
 
   const getClassifiedData = async () => {
     try {
-      setLoading(true);
-      await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL}/classify-transactions`
+      // setIsClassifying(true);
+      const response = await axios.get(
+        `${
+          import.meta.env.VITE_API_BASE_URL
+        }/classify-transactions/${accountId}`
       );
+      setRecentStatement(response.data);
+      return response;
     } catch (error) {
       console.log(error);
       message.error("Failed to fetch classification data");
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
-  const handleClassifyNavigation = () => {
-    navigate("/transaction-classification");
+  const handleClassifyNavigation = async () => {
+    setIsClassifying(true);
+    try {
+      await getClassifiedData();
+      const response = await axios.post(
+        `${
+          import.meta.env.VITE_API_BASE_URL
+        }/bank-statements/${accountId}/status`
+      );
+      if (response.status === 200) {
+        navigate(`/transaction-classification/${parseInt(accountId)}`);
+      }
+    } catch (error) {
+      toast.error("Failed to classify!");
+    } finally {
+      setIsClassifying(false);
+    }
   };
 
   useEffect(() => {
-    if (clientData?.accountId) {
+    if (accountId) {
       getClassifiedData();
       getStatementByAccountID();
     }
-  }, [clientData?.accountId]);
+  }, [accountId]);
 
   // Handle table change including pagination and sorting
   const handleTableChange = (pagination, filters, sorter) => {
@@ -202,9 +220,7 @@ const StatementHistory = () => {
   const updateBankDetails = async () => {
     try {
       await axios.put(
-        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${
-          clientData.accountId
-        }`,
+        `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${accountId}`,
         editedData
       );
       message.success("Changes saved successfully");
@@ -222,9 +238,7 @@ const StatementHistory = () => {
         await updateBankDetails();
       } else {
         await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${
-            clientData.accountId
-          }`,
+          `${import.meta.env.VITE_API_BASE_URL}/bank-statements/${accountId}`,
           editedData
         );
         message.success("New transaction added successfully");
@@ -641,15 +655,23 @@ const StatementHistory = () => {
         onChange={handleTableChange}
         scroll={{ x: 800 }}
       />
+      {console.log(statementData)}
       <Button
         type="text"
-        iconPosition={"end"}
-        icon={<RightOutlined />}
+        iconPosition="end"
+        icon={isClassifying ? <LoadingOutlined /> : <RightOutlined />}
         className="classifyBtn"
         size="large"
         onClick={handleClassifyNavigation}
+        disabled={
+          isClassifying || statementData?.accountInfo?.status === "Classified"
+        }
       >
-        Classify
+        {isClassifying
+          ? "Classifying..."
+          : statementData?.accountInfo?.status === "Classified"
+          ? "Classified"
+          : "Classify"}
       </Button>
     </Card>
   );

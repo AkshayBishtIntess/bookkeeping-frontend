@@ -128,3 +128,9 @@
   color: white !important;
   border-radius: 30px;
 }
+
+.classifyBtn:disabled {
+  background: #ddd !important;
+  color: #888 !important;
+  border-radius: 30px;
+}

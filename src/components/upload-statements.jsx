@@ -14,13 +14,15 @@ import { CopyOutlined, RightOutlined } from "@ant-design/icons";
 import FileUpload from "./file-upload";
 import useClientStore from "../store/useClientStore";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const Statements = () => {
   const [form] = Form.useForm();
-  const { searchedClient, setClientStatement, setClients } = useClientStore();
+  const { searchedClient, setClientStatement, setClients, setSearchedClient, resetSearch } = useClientStore();
   const [messageApi, contextHolder] = message.useMessage();
   const [isLoading, setIsLoading] = useState(false);
   const key = "updatable";
+  const navigate = useNavigate();
 
   const TabItems = [
     {
@@ -56,6 +58,7 @@ const Statements = () => {
       formData.append("id", searchedClient?.id);
       formData.append("pdfFile", values?.uploadedFile);
       formData.append("monthReference", formattedDate); 
+      formData.append("status", 'Uploaded'); 
 
       // Show loading message without duration (will stay until manually changed)
       messageApi.open({
@@ -72,7 +75,6 @@ const Statements = () => {
           `${import.meta.env.VITE_API_BASE_URL}/process-statement`,
           formData
         );
-
       
         // Only close the loading message if we get a successful response
         if (response.status === 200) {
@@ -82,6 +84,8 @@ const Statements = () => {
             content: response.data.databaseOperation.message,
             duration: 2,
           });
+          resetSearch();
+          navigate(`/statement-history/${response.data.databaseOperation.accountId}`)
           setClientStatement(response.data);
           form.resetFields();
           setIsLoading(false);
@@ -94,6 +98,7 @@ const Statements = () => {
             duration: 0,
           });
         }
+        setSearchedClient({});
       } catch (error) {
         // Show error message if request fails
         messageApi.open({

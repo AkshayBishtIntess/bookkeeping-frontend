@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { Card, Typography, Select, Table, Row, Col, AutoComplete, Space, Button } from "antd";
-import { EyeOutlined } from "@ant-design/icons";
+import {
+  Card,
+  Typography,
+  Select,
+  Table,
+  Row,
+  Col,
+  AutoComplete,
+  Space,
+  Button,
+} from "antd";
+import { EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const { Title } = Typography;
 
@@ -21,13 +32,11 @@ const ClientUploadHistory = () => {
 
   const fetchBankStatements = async () => {
     try {
-      const response = await fetch(
+      const response = await axios.get(
         `${import.meta.env.VITE_API_BASE_URL}/bank-statements`
       );
-      if (!response.ok) {
-        throw new Error("Failed to fetch bank statements");
-      }
-      const data = await response.json();
+  
+      const data = await response.data;
 
       const formattedData = data.data.map((ele) => ({
         createdAt: moment(ele.createdAt).format("DD/MM/YYYY"),
@@ -37,12 +46,12 @@ const ClientUploadHistory = () => {
           : "-",
         dateUpload: moment(ele.createdAt).format("DD/MM/YYYY"),
         dateDone: moment(ele.createdAt).format("DD/MM/YYYY"),
-        status: "Done",
+        status: ele.accountInfo.status,
         clientName: ele.client.clientName,
         accessCode: ele.client.accessCode,
         transactions: ele.transactions,
         accountId: ele.accountId,
-        id: ele.id
+        id: ele.id,
       }));
 
       setAllData(formattedData);
@@ -190,19 +199,49 @@ const ClientUploadHistory = () => {
       value: bank,
     }));
 
+  const monthReferenceOptions = [
+    ...new Set(allData.map((item) => item.monthReference)),
+  ]
+    .filter(Boolean)
+    .map((month) => ({ value: month }));
+
   const handleTableChange = (pagination) => {
     setCurrentPage(pagination.current);
     setPageSize(pagination.pageSize);
   };
 
-
   const handleNavigate = (record) => {
     console.log(record);
-    navigate("/statement-history", { state: { clientData: record } });
+    navigate(`/statement-history/${record.accountId}`);
+  };
+
+  const handleNavigateToNewClient = () => {
+    navigate("/statements");
   };
 
   return (
-    <Card className="p-6">
+    <Card
+      className="p-6"
+      title={
+        <Title
+          level={4}
+          className="mt-0"
+          style={{ marginTop: 6, marginBottom: 6 }}
+        >
+          Client Upload
+        </Title>
+      }
+      extra={
+        <Button
+          type="primary"
+          className="actionBtnColors"
+          icon={<PlusOutlined />}
+          onClick={handleNavigateToNewClient}
+        >
+          New Upload
+        </Button>
+      }
+    >
       <Row
         gutter={16}
         className="mb-6 p-3 items-end"
@@ -269,26 +308,19 @@ const ClientUploadHistory = () => {
           <Title level={5} className="mb-2">
             Month Reference
           </Title>
-          <Select
-            placeholder="Select month"
+          <AutoComplete
+            placeholder="Search month reference..."
             value={filters.monthReference}
             onChange={(value) => handleInputChange("monthReference", value)}
-            style={{ width: "100%" }}
+            options={monthReferenceOptions}
+            style={{
+              width: "100%",
+            }}
             allowClear
-            options={[
-              { value: "Jan", label: "January" },
-              { value: "Feb", label: "February" },
-              { value: "Mar", label: "March" },
-              { value: "Apr", label: "April" },
-              { value: "May", label: "May" },
-              { value: "Jun", label: "June" },
-              { value: "Jul", label: "July" },
-              { value: "Aug", label: "August" },
-              { value: "Sep", label: "September" },
-              { value: "Oct", label: "October" },
-              { value: "Nov", label: "November" },
-              { value: "Dec", label: "December" },
-            ]}
+            filterOption={(inputValue, option) =>
+              option.value.toLowerCase().indexOf(inputValue.toLowerCase()) !==
+              -1
+            }
           />
         </Col>
       </Row>

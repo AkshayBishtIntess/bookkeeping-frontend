@@ -31,7 +31,9 @@ const useClientStore = create(
       allStatement:[],
       recentStatement: [],
       specificRecord: [],
-
+      hasVisitedClassification: false,
+      searchValue: '',
+   
       fetchBankStatements,
       
       setClients: (clients) => set({ clients }),
@@ -40,6 +42,10 @@ const useClientStore = create(
       setAllBankStatement: (allStatement) => set({ allStatement }),
       setRecentStatement: (recentStatement) => set({ recentStatement }),
       setSpecificRecord: (specificRecord) => set({ specificRecord }),
+      clearRecentStatement: () => set({ recentStatement: [] }),
+      setHasVisitedClassification: (value) => set({ hasVisitedClassification: value }),
+      setSearchValue: (value) => set({ searchValue: value }),
+      resetSearch: () => set({ searchValue: '', searchedClient: {} }),
     };
   })
 );
